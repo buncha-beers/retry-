@@ -133,6 +133,64 @@ pre{white-space:pre-wrap;word-break:break-word;margin:0}
 </script>
 </body>
 </html>
+[build]
+  publish = "."
+  functions = "netlify/functions"
+export async function handler(event) {
+  try {
+    const { topic, chaos, length } = JSON.parse(event.body || "{}");
+    const prompt = `Write a ${length||'60-90s'} comedic dialogue between Chad (buzzed bro) and Ronnie (skeptical conspiracy guy) about: ${topic}.
+Include a final beat where: ${chaos || 'the neon sign buzzes'}. Keep it spicy but safe for TikTok/IG.`;
+
+    const r = await fetch("https://api.openai.com/v1/chat/completions", {
+      method: "POST",
+      headers: {
+        "Authorization": `Bearer ${process.env.OPENAI_API_KEY}`,
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify({
+        model: "gpt-4o-mini",
+        messages: [
+          { role: "system", content: "You are a comedic scriptwriter." },
+          { role: "user", content: prompt }
+        ],
+        temperature: 0.9
+      })
+    });
+
+    const j = await r.json();
+    const script = j?.choices?.[0]?.message?.content || "Chad: …\nRonnie: …";
+    return { statusCode: 200, body: JSON.stringify({ script }) };
+
+  } catch (e) {
+    return { statusCode: 500, body: JSON.stringify({ error: e.message }) };
+  }
+}
+export async function handler(event) {
+  try {
+    const { text, voiceId } = JSON.parse(event.body || "{}");
+    if (!text) return { statusCode: 400, body: JSON.stringify({ error: "Missing text" }) };
+    if (!voiceId) return { statusCode: 400, body: JSON.stringify({ error: "Missing voiceId" }) };
+
+    const r = await fetch(`https://api.elevenlabs.io/v1/text-to-speech/${voiceId}`, {
+      method: "POST",
+      headers: { "xi-api-key": process.env.ELEVEN_API_KEY, "Content-Type": "application/json" },
+      body: JSON.stringify({
+        text,
+        model_id: "eleven_monolingual_v1",
+        voice_settings: { stability: 0.5, similarity_boost: 0.85 }
+      })
+    });
+
+    // Most ElevenLabs endpoints return audio bytes. Forward as base64 for browser preview.
+    const buf = await r.arrayBuffer();
+    const b64 = Buffer.from(buf).toString("base64");
+    return { statusCode: 200, body: JSON.stringify({ audioBase64: b64, mime: "audio/mpeg" }) };
+
+  } catch (e) {
+    return { statusCode: 500, body: JSON.stringify({ error: e.message }) };
+  }
+}
 export async function handler(event) {
   try {
     return { statusCode: 200, body: JSON.stringify({ videoUrl: null, note: "Wire your avatar provider here later." }) };
